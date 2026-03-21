@@ -21,7 +21,6 @@
       {
         devShells.default =
         let
-          rust-analyzer = pkgs.fenix.rust-analyzer;
           rust = pkgs.fenix.stable.toolchain;
         in
         pkgs.mkShell {
