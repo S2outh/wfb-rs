@@ -28,9 +28,11 @@
             rust
             rust-analyzer
             
-            libpcap
             iw
           ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
+            libpcap
+          ]);
         };
       }
     );
