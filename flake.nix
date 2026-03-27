@@ -22,6 +22,7 @@
         devShells.default =
         let
           rust = pkgs.fenix.stable.toolchain;
+          libPath = pkgs.lib.makeLibraryPath [ pkgs.libpcap ];
         in
         pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -29,10 +30,10 @@
             rust-analyzer
             
             iw
-          ];
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
             libpcap
-          ]);
+          ];
+          LD_LIBRARY_PATH = libPath;
+          RUSTFLAGS = "-C link-arg=-Wl,-rpath,${libPath}";
         };
       }
     );
