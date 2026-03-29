@@ -1,7 +1,7 @@
 use clap::Parser;
 use wfb_rs::{common::{bandwidth::Bandwidth, utils}, Transmitter};
 
-use std::{io, thread};
+use std::{io, sync::{mpsc::{TrySendError, sync_channel}}, thread};
 use std::net::UdpSocket;
 use std::time::Duration;
 use std::sync::mpsc::channel;
@@ -13,7 +13,7 @@ struct Args {
     /// Explicitly disable fec
     #[arg(short = 'f', long, default_value_t = false)]
     fec_disabled: bool,
-    
+
     // Magic number to identify the device
     #[arg(short = 'm', long, default_value_t = 0x57627273)]
     magic: u32,
@@ -28,7 +28,11 @@ struct Args {
 
     /// Receiving Buffer Size
     #[arg(short = 'R', long, default_value_t = 1_500)]
-    buffer_size: usize,
+    receive_buffer_size: usize,
+
+    /// Receiving Buffer Size
+    #[arg(short = 'T', long, default_value_t = 256)]
+    transfer_buffer_size: usize,
 
     // (max) Size of each package send over wifi
     #[arg(short = 'W', long, default_value_t = 800)]
@@ -147,13 +151,14 @@ fn main() {
 
     run(tx,
         args.source_port,
-        args.buffer_size,
+        args.receive_buffer_size,
+        args.transfer_buffer_size,
         args.log_interval,
     ).unwrap();
 }
 
 
-pub fn run(mut tx: Transmitter, source_port: u16, buffer_r: usize, log_interval: Duration) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(mut tx: Transmitter, source_port: u16, buffer_r: usize, buffer_s: usize, log_interval: Duration) -> Result<(), Box<dyn std::error::Error>> {
 
     let udp_socket = UdpSocket::bind(format!("0.0.0.0:{}", source_port))?;
     
@@ -176,7 +181,7 @@ pub fn run(mut tx: Transmitter, source_port: u16, buffer_r: usize, log_interval:
         }
     });
 
-    let (packet_s, packet_r) = channel();
+    let (packet_s, packet_r) = sync_channel(buffer_s);
 
     // start sendtask
     thread::spawn(move || {
@@ -213,7 +218,13 @@ pub fn run(mut tx: Transmitter, source_port: u16, buffer_r: usize, log_interval:
 
                 received_bytes_s.send(received as u32)?;
 
-                packet_s.send(udp_packet).expect("packet receiver closed");
+                if let Err(err) = packet_s.try_send(udp_packet) {
+                    if let TrySendError::Full(_) = err {
+                        eprintln!("Warning: packet buffer full, dropping packet");
+                    } else {
+                        panic!("packet receiver closed");
+                    }
+                }
             }
         }
     }
