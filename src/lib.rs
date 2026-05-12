@@ -6,3 +6,4 @@ mod tx;
 #[cfg(feature = "receiver")]
 pub use rx::Receiver;
 pub use tx::Transmitter;
+pub use common::telemetry::Telemetry;

@@ -2,21 +2,31 @@ use pcap::{self, Active, Capture};
 use radiotap::Radiotap;
 
 use crate::common::hw_headers;
+use crate::common::telemetry::Telemetry;
 
 pub(super) struct RXHwInt {
+    wifi_device: String,
     wifi_capture: Capture<Active>,
 }
 
 
 impl RXHwInt {
     pub fn new(wifi_device: String, channel_id: u32) -> Result<Self, Box<dyn std::error::Error>> {
-        let wifi_capture = Self::open_wifi_capture(wifi_device, channel_id)?;
-        Ok(Self { wifi_capture })
+        let wifi_capture = Self::open_wifi_capture(wifi_device.clone(), channel_id)?;
+        Ok(Self { wifi_device, wifi_capture })
     }
-    pub fn receive_packet(&mut self) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    pub fn receive_packet(&mut self) -> Result<Option<(Vec<u8>, Option<Telemetry>)>, Box<dyn std::error::Error>> {
         match self.wifi_capture.next_packet() {
             Ok(packet) if packet.len() > 0 => {
-                Ok(Self::process_packet(&packet)?)
+                let res = Self::process_packet(&packet)?;
+                if let Some((payload, Some(mut telemetry))) = res {
+                    telemetry.device = self.wifi_device.clone();
+                    Ok(Some((payload, Some(telemetry))))
+                } else if let Some((payload, None)) = res {
+                    Ok(Some((payload, None)))
+                } else {
+                    Ok(None)
+                }
             }
             Ok(_packet) => {
                 //TODO reset fec (?)
@@ -36,7 +46,7 @@ impl RXHwInt {
     // Reads and removes the radiotap and wifi headers
     pub fn process_packet(
         packet: &[u8],
-    ) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<(Vec<u8>, Option<Telemetry>)>, Box<dyn std::error::Error>> {
 
         if packet.len() < 4 {
             eprintln!("packet too short");
@@ -47,10 +57,20 @@ impl RXHwInt {
         let radiotap_len = u16::from_le_bytes([packet[2], packet[3]]) as usize;
 
         //Parse the whole radiotap header via library
-        let _radiotap_header = Radiotap::from_bytes(packet)?;
+        let radiotap_header = Radiotap::from_bytes(packet)?;
 
-        //println!("Received header: {:?}", radiotap_header);
-        //let header_len = radiotap_header.header.size;
+        let telemetry = if let (Some(sig), Some(noise)) = (radiotap_header.antenna_signal, radiotap_header.antenna_noise) {
+            let snr = sig.value - noise.value;
+            // println!("Power: {} dbm SNR: {} db", sig.value, snr);
+            Some(Telemetry {
+                device: String::new(), // Will be filled by caller
+                signal_dbm: sig.value,
+                noise_dbm: noise.value,
+                snr_db: snr,
+            })
+        } else {
+            None
+        };
 
         // Skip radiotap header and IEEE 802.11 header
         let payload_start = radiotap_len + hw_headers::IEEE80211_HEADER.len();
@@ -66,7 +86,7 @@ impl RXHwInt {
         //TODO figure out what that is
         let payload = &payload[..payload.len().saturating_sub(4)];
 
-        Ok(Some(payload.to_vec()))
+        Ok(Some((payload.to_vec(), telemetry)))
     }
 
     pub fn open_wifi_capture(wifi_device: String, channel_id: u32) -> Result<Capture<Active>, Box<dyn std::error::Error>> {

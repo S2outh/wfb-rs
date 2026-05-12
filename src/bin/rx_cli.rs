@@ -1,10 +1,26 @@
 use clap::Parser;
+use serde::Serialize;
 use wfb_rs::{common::utils, Receiver};
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::net::UdpSocket;
 use std::sync::mpsc::channel;
 use std::thread;
+
+#[derive(Serialize)]
+struct TelemetryVector {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+#[derive(Serialize)]
+struct TelemetryMessage {
+    timestamp: u64,
+    value: TelemetryVector,
+    #[serde(rename = "type")]
+    tp: String,
+}
 
 /// Receiving side of wfb_rs
 #[derive(Parser, Debug)]
@@ -38,6 +54,10 @@ struct Args {
     #[arg(short='s', long, default_value_t = false)]
     wifi_setup: bool,
 
+    /// NATS server address
+    #[arg(short = 'n', long)]
+    nats: Option<String>,
+
     /// Wifi Device
     #[arg(required = true, num_args = 1..)]
     wifi_devices: Vec<String>
@@ -59,12 +79,44 @@ fn main() {
         }
     }
 
-    let rx = Receiver::new(
+    let mut rx = Receiver::new(
         args.magic,
         args.radio_port,
         args.link_id,
         args.wifi_devices,
     ).unwrap();
+
+    if let Some(nats_addr) = args.nats {
+        println!("Connecting to NATS at {}", nats_addr);
+        let nats_client = nats::connect(nats_addr).expect("Could not connect to NATS");
+        rx.set_telemetry_callback(Box::new(move |t| {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_micros() as u64;
+
+            let msg = TelemetryMessage {
+                timestamp,
+                value: TelemetryVector {
+                    x: t.snr_db as f64,
+                    y: t.signal_dbm as f64,
+                    z: t.noise_dbm as f64,
+                },
+                tp: "float64".into(),
+            };
+
+            match serde_cbor::to_vec(&msg) {
+                Ok(cbor) => {
+                    if let Err(e) = nats_client.publish("telemetry.wfb.vector", cbor) {
+                        eprintln!("Error publishing to NATS: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error serializing telemetry: {}", e);
+                }
+            }
+        }));
+    }
 
     run(rx,
         args.client_address,

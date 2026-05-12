@@ -4,11 +4,13 @@ mod rx_fec;
 use rx_hardware_interface::RXHwInt;
 use rx_fec::RXFec;
 use crate::common::magic_header::MagicHeader;
+use crate::common::telemetry::Telemetry;
 
 pub struct Receiver {
     rxs: Vec<RXHwInt>,
     fec: RXFec,
     magic_header: MagicHeader,
+    telemetry_callback: Option<Box<dyn Fn(Telemetry) + Send + Sync>>,
 }
 
 impl Receiver {
@@ -34,15 +36,24 @@ impl Receiver {
             rxs,
             fec,
             magic_header,
+            telemetry_callback: None,
         })
+    }
+
+    pub fn set_telemetry_callback(&mut self, callback: Box<dyn Fn(Telemetry) + Send + Sync>) {
+        self.telemetry_callback = Some(callback);
     }
 
     pub fn recv(&mut self) -> Result<(Vec<Vec<u8>>, u32), Box<dyn std::error::Error>> {
         let mut received_bytes = 0;
         loop {
             for rx in &mut self.rxs {
-                let Some(raw_packet) = rx.receive_packet()? else { continue; };
+                let Some((raw_packet, telemetry)) = rx.receive_packet()? else { continue; };
                 received_bytes += raw_packet.len() as u32;
+
+                if let (Some(ref cb), Some(t)) = (&self.telemetry_callback, telemetry) {
+                    cb(t);
+                }
 
                 let Some((fec_pkg, wfb_packet)) = self.magic_header.from_bytes(&raw_packet) else { continue; };
                 
