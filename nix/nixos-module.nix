@@ -5,7 +5,8 @@
   boot.blacklistedKernelModules = [ "rtw88_8812au" ];
   boot.extraModulePackages = [
     (config.boot.kernelPackages.callPackage ./rtl8812au-svpcom.nix { })
+    (config.boot.kernelPackages.callPackage ./rtl8731bu_libc.nix { })
   ];
   # force loading the custom driver at boot
-  boot.kernelModules = [ "88XXau_wfb" ];
+  boot.kernelModules = [ "88XXau_wfb" "8733bu" ];
 }
