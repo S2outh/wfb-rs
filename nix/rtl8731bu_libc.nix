@@ -5,7 +5,7 @@
   kernel,
   bc,
   nukeReferences,
-}: 
+}:
 
 stdenv.mkDerivation rec {
   pname = "rtl8731bu-libc";
@@ -28,13 +28,16 @@ stdenv.mkDerivation rec {
     "format"
   ];
 
+  patches = [
+    ./patches/rtl8731bu-kernel-compat.patch
+  ];
+
   prePatch = ''
     substituteInPlace ./Makefile \
       --replace /lib/modules/ "${kernel.dev}/lib/modules/" \
       --replace /sbin/depmod \# \
       --replace '$(MODDESTDIR)' "$out/lib/modules/${kernel.modDirVersion}/kernel/net/wireless/"
 
-    
     echo 'EXTRA_CFLAGS += -I$(PWD)' >> Makefile
   '';
 

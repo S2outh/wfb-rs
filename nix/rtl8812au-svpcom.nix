@@ -28,13 +28,16 @@ stdenv.mkDerivation rec {
     "format"
   ];
 
+  patches = [
+    ./patches/rtl8812au-kernel-compat.patch
+  ];
+
   prePatch = ''
     substituteInPlace ./Makefile \
       --replace /lib/modules/ "${kernel.dev}/lib/modules/" \
       --replace /sbin/depmod \# \
       --replace '$(MODDESTDIR)' "$out/lib/modules/${kernel.modDirVersion}/kernel/net/wireless/" \
       --replace ' O="$(KBUILD_OUTPUT)"' ""
-
 
     echo 'EXTRA_CFLAGS += -I$(PWD)' >> Makefile
   '';
