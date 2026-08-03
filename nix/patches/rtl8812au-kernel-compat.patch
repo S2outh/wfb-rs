@@ -1,7 +1,15 @@
 diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
 --- a/core/rtw_br_ext.c	1970-01-01 01:00:01.000000000 +0100
-+++ b/core/rtw_br_ext.c	2026-07-20 19:06:02.766217171 +0200
-@@ -85,7 +85,7 @@
++++ b/core/rtw_br_ext.c	2026-08-03 15:04:33.700132424 +0200
+@@ -13,6 +13,7 @@
+  *
+  *****************************************************************************/
+ #define _RTW_BR_EXT_C_
++#include <linux/version.h>
+ 
+ #ifdef __KERNEL__
+ 	#include <linux/if_arp.h>
+@@ -117,7 +118,7 @@
  	unsigned char *cur_ptr, *start_ptr;
  	unsigned short tagLen, tagType;
  
@@ -10,7 +18,7 @@ diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
  	while ((cur_ptr - start_ptr) < ntohs(ph->length)) {
  		/* prevent un-alignment access */
  		tagType = (unsigned short)((cur_ptr[0] << 8) + cur_ptr[1]);
-@@ -111,9 +111,9 @@
+@@ -143,9 +144,9 @@
  
  	skb_put(skb, data_len);
  	/* have a room for new tag */
@@ -22,7 +30,7 @@ diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
  	return data_len;
  }
  
-@@ -1141,8 +1141,8 @@
+@@ -1173,8 +1174,8 @@
  								return -1;
  							}
  
@@ -33,7 +41,7 @@ diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
  
  							if (skb_pull_and_merge(skb, (unsigned char *)pOldTag, TAG_HDR_LEN + old_tag_len) < 0) {
  								DEBUG_ERR("call skb_pull_and_merge() failed in PADI/R packet!\n");
-@@ -1155,9 +1155,9 @@
+@@ -1187,9 +1188,9 @@
  						tag->tag_len = htons(MAGIC_CODE_LEN + RTL_RELAY_TAG_LEN + old_tag_len);
  
  						/* insert the magic_code+client mac in relay tag */
@@ -45,7 +53,7 @@ diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
  
  						/* Add relay tag */
  						if (__nat25_add_pppoe_tag(skb, tag) < 0)
-@@ -1218,14 +1218,14 @@
+@@ -1250,14 +1251,14 @@
  						return -1;
  					}
  
@@ -64,7 +72,7 @@ diff -u -N -r a/core/rtw_br_ext.c b/core/rtw_br_ext.c
  						offset = TAG_HDR_LEN;
 diff -u -N -r a/os_dep/linux/ioctl_cfg80211.c b/os_dep/linux/ioctl_cfg80211.c
 --- a/os_dep/linux/ioctl_cfg80211.c	1970-01-01 01:00:01.000000000 +0100
-+++ b/os_dep/linux/ioctl_cfg80211.c	2026-07-20 19:06:02.768589388 +0200
++++ b/os_dep/linux/ioctl_cfg80211.c	2026-08-03 15:04:33.704000364 +0200
 @@ -3907,7 +3907,11 @@
  		sinfo.filled = STATION_INFO_ASSOC_REQ_IES;
  		sinfo.assoc_req_ies = pmgmt_frame + WLAN_HDR_A3_LEN + ie_offset;
